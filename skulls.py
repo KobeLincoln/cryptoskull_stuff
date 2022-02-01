@@ -447,7 +447,7 @@ def color_distance(df, col1, col2):
 def project_compare(project_a, project_b, resize=96, token_ids=None):
 
     if token_ids == None:
-        token_ids = [7583] + get_comparison_ids()
+        token_ids = [7583] + get_comparison_ids() + [6969]
         # print(token_ids)
 
     ims_a = [assemble(token_id, project_a, resize=resize) for token_id in token_ids]
@@ -590,6 +590,18 @@ def validate():
             imshow(im_new)
             raise
     print('success')
+
+
+
+def export_project(project_name, filepath_template, resize=None):
+
+    for token_id in range(0, 10000):
+        if token_id in special_tokens:
+            continue
+        im = assemble(token_id, project_name)
+        if resize is not None:
+            im = im.resize((resize, resize), Image.NEAREST)
+        im.save(filepath_template % token_id)
 
 
 
