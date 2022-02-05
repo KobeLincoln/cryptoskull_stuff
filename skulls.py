@@ -605,6 +605,47 @@ def export_project(project_name, filepath_template, resize=None):
 
 
 
+# SVG CONVERSION ###################################################################################
+
+
+
+
+def export_svgs(filepath_template):
+    for token_id in range(0, 10000):
+        if token_id in special_tokens:
+            continue
+        export_svg(token_id, filepath_template)
+
+
+
+def export_svg(token_id, filepath_template):
+
+    pixels = cropped_skulls[token_id].copy().load()
+
+    bg_pixel = pixels[0, 0]
+    svg_content = """<rect width="24" height="24" style="fill:rgb(%d,%d,%d)" />""" % bg_pixel
+    for i in range(24):
+        for j in range(24):
+            pixel = pixels[i, j]
+            if pixel != bg_pixel:
+                w = 1
+                for ii in range(i+1, 24):
+                    if pixels[ii, j] != pixel:
+                        break
+                    w += 1
+                    pixels[ii, j] = bg_pixel
+                    
+                rect = """<rect x="%d" y="%d" width="%d" height="1" style="fill:rgb(%d,%d,%d)" />""" % (i, j, w, *pixel)
+                svg_content += rect
+
+    svg = """<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">%s</svg>""" % svg_content
+
+    # Write to a text file
+    with open(filepath_template % token_id, 'w') as f:
+        f.write(svg)
+
+
+
 # CLONING PROJECT BASE IMAGES WITH RESIZE OPTION ###################################################
 
 
