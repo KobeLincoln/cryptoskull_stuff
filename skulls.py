@@ -650,6 +650,8 @@ c_outline = (38, 50, 56)
 # sophisticated
 def produce_svg(token_id, filepath_template):
 
+    line = '' #'\n'
+
     pixels = cropped_skulls[token_id].copy().load()
     pixels_alt = cropped_skulls[token_id].copy().load()
     
@@ -667,14 +669,14 @@ def produce_svg(token_id, filepath_template):
                 pt_alt = (i, j) # takes the first
 
     svg_poly, p_polygon = get_polygon(pixels_alt, *pt_alt)
-    svg_content += svg_poly
+    svg_content += line + svg_poly
 
     # rest of the stuff
     p_assigned = []
     for i, j in product(range(24), range(24)):
         if (pixels[i, j] not in [bg_pixel, c_outline]) and ((i, j) not in p_assigned):
             svg_poly, p_polygon = get_polygon(pixels, i, j)
-            svg_content += svg_poly
+            svg_content += line + svg_poly
             p_assigned += p_polygon
 
     svg = """<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">%s</svg>""" % svg_content
@@ -685,48 +687,50 @@ def produce_svg(token_id, filepath_template):
 
 def get_polygon(pixels, i, j):
     rgb_color = pixels[i, j]
-    points, p_polygon, p_processed = get_points(pixels, i, j, [])
+    points, p_polygon, p_processed = get_points(pixels, i, j, [], 'r')
     points = reduce_points(points)
     return svg_polygon(points, rgb_color), p_polygon
 
 
 
-def get_points(pixels, i, j, p_processed):
+def get_points(pixels, i, j, p_processed, call):
 
     p_processed += [(i, j)]
-
-    # print(p_processed)
-
     rgb_color = pixels[i, j]
-
     a, b, c, d = (i, j), (i+1, j), (i+1, j+1), (i, j+1)
-
     pt_u, pt_r, pt_d, pt_l = (i, j-1), b, d, (i-1, j)
 
     if j > 0 and pt_u not in p_processed and pixels[pt_u[0], pt_u[1]] == rgb_color:
-        pts_u, pixels_u, p_processed = get_points(pixels, *pt_u, p_processed)
+        pts_u, pixels_u, p_processed = get_points(pixels, *pt_u, p_processed, 'u')
     else:
         pts_u, pixels_u = [], []
 
     if i < 23 and pt_r not in p_processed and pixels[pt_r[0], pt_r[1]] == rgb_color:
-        pts_r, pixels_r, p_processed = get_points(pixels, *pt_r, p_processed)
+        pts_r, pixels_r, p_processed = get_points(pixels, *pt_r, p_processed, 'r')
     else:
         pts_r, pixels_r = [], []
 
     if j < 23 and pt_d not in p_processed and pixels[pt_d[0], pt_d[1]] == rgb_color:
-        pts_d, pixels_d, p_processed = get_points(pixels, *pt_d, p_processed)
+        pts_d, pixels_d, p_processed = get_points(pixels, *pt_d, p_processed, 'd')
     else:
         pts_d, pixels_d = [], []
 
     if i > 0 and pt_l not in p_processed and pixels[pt_l[0], pt_l[1]] == rgb_color:
-        pts_l, pixels_l, p_processed = get_points(pixels, *pt_l, p_processed)
+        pts_l, pixels_l, p_processed = get_points(pixels, *pt_l, p_processed, 'l')
     else:
         pts_l, pixels_l = [], []
 
-    # p_processed = p_processed + [pt_u, pt_r, pt_d, pt_l]
-
     p_polygon = [(i, j)] + pixels_u + pixels_r + pixels_d + pixels_l
-    points = [a, *pts_u, b, *pts_r, c, *pts_d, d, *pts_l, a]
+    if call == 'u':
+        points = [d, *pts_l, a, *pts_u, b, *pts_r, c, *pts_d, d]
+    elif call == 'r':
+        points = [a, *pts_u, b, *pts_r, c, *pts_d, d, *pts_l, a]
+    elif call == 'd':
+        points = [b, *pts_r, c, *pts_d, d, *pts_l, a, *pts_u, b]
+    elif call == 'l':
+        points = [c, *pts_d, d, *pts_l, a, *pts_u, b, *pts_r, c]
+    else:
+        raise
 
     return points, p_polygon, p_processed
 
