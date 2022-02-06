@@ -646,14 +646,18 @@ def produce_svg_naive(token_id, filepath_template):
 
 
 c_outline = (38, 50, 56)
+c_trans = (0,0,0,0)
 
 # sophisticated
 def produce_svg(token_id, filepath_template):
 
     line = '' #'\n'
 
-    pixels = cropped_skulls[token_id].copy().load()
-    pixels_alt = cropped_skulls[token_id].copy().load()
+    pixels_skull = Image.open('%s\%s\%s' % ('cryptoskulls_backup', 'skull', 'skull0.png')).load()
+
+    im = cropped_skulls[token_id]
+    pixels = im.copy().load()
+    pixels_alt = im.copy().load()
     
     # background
     bg_pixel = pixels[0, 0]
@@ -662,19 +666,23 @@ def produce_svg(token_id, filepath_template):
     # outline
     pt_alt = None
 
+    p_assigned = []
+
     for i, j in product(range(24), range(24)):
-        if pixels[i, j] != bg_pixel:
+        if (pixels[i, j] != bg_pixel) or (pixels_skull[i, j] != c_trans):
             pixels_alt[i, j] = c_outline
             if pt_alt is None:
                 pt_alt = (i, j) # takes the first
+        else:
+            p_assigned += [(i, j)]
 
     svg_poly, p_polygon = get_polygon(pixels_alt, *pt_alt)
     svg_content += line + svg_poly
 
     # rest of the stuff
-    p_assigned = []
+    
     for i, j in product(range(24), range(24)):
-        if (pixels[i, j] not in [bg_pixel, c_outline]) and ((i, j) not in p_assigned):
+        if (pixels[i, j] != c_outline) and ((i, j) not in p_assigned):
             svg_poly, p_polygon = get_polygon(pixels, i, j)
             svg_content += line + svg_poly
             p_assigned += p_polygon
@@ -769,6 +777,25 @@ def reduce_points(points):
         points.pop(-1)
     return points
 
+
+
+
+    # nose
+
+    # teeth
+
+    # hair
+
+
+
+
+
+
+
+    svg = """<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">%s</svg>""" % svg_content
+
+    with open(filepath_template % token_id, 'w') as f:
+        f.write(svg)
 
 
 # CLONING PROJECT BASE IMAGES WITH RESIZE OPTION ###################################################
