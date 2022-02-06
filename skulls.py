@@ -605,8 +605,8 @@ def export_project(project_name, filepath_template, resize=None):
 
 
 
-# SVG CONVERSION ###################################################################################
-
+# SVG CONVERSION - NAIVE ###########################################################################
+# kinda-works but edges are shared which leads to artifacts
 
 
 
@@ -614,11 +614,12 @@ def export_svgs(filepath_template):
     for token_id in range(0, 10000):
         if token_id in special_tokens:
             continue
-        export_svg(token_id, filepath_template)
+        produce_svg(token_id, filepath_template)
 
 
 
-def export_svg(token_id, filepath_template):
+# naive
+def produce_svg_naive(token_id, filepath_template):
 
     pixels = cropped_skulls[token_id].copy().load()
 
@@ -639,10 +640,130 @@ def export_svg(token_id, filepath_template):
                 svg_content += rect
 
     svg = """<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">%s</svg>""" % svg_content
-
-    # Write to a text file
     with open(filepath_template % token_id, 'w') as f:
         f.write(svg)
+
+
+
+c_outline = (38, 50, 56)
+
+# sophisticated
+def produce_svg(token_id, filepath_template):
+
+    pixels = cropped_skulls[token_id].copy().load()
+    pixels_alt = cropped_skulls[token_id].copy().load()
+    
+    # background
+    bg_pixel = pixels[0, 0]
+    svg_content = """<rect width="24" height="24" style="fill:rgb(%d,%d,%d)" />""" % bg_pixel
+
+    # outline
+    pt_alt = None
+
+    for i, j in product(range(24), range(24)):
+        if pixels[i, j] != bg_pixel:
+            pixels_alt[i, j] = c_outline
+            if pt_alt is None:
+                pt_alt = (i, j) # takes the first
+
+    svg_poly, p_polygon = get_polygon(pixels_alt, *pt_alt)
+    svg_content += svg_poly
+
+    # rest of the stuff
+    p_assigned = []
+    for i, j in product(range(24), range(24)):
+        if (pixels[i, j] not in [bg_pixel, c_outline]) and ((i, j) not in p_assigned):
+            svg_poly, p_polygon = get_polygon(pixels, i, j)
+            svg_content += svg_poly
+            p_assigned += p_polygon
+
+    svg = """<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">%s</svg>""" % svg_content
+    with open(filepath_template % token_id, 'w') as f:
+        f.write(svg)
+
+
+
+def get_polygon(pixels, i, j):
+    rgb_color = pixels[i, j]
+    points, p_polygon, p_processed = get_points(pixels, i, j, [])
+    points = reduce_points(points)
+    return svg_polygon(points, rgb_color), p_polygon
+
+
+
+def get_points(pixels, i, j, p_processed):
+
+    p_processed += [(i, j)]
+
+    # print(p_processed)
+
+    rgb_color = pixels[i, j]
+
+    a, b, c, d = (i, j), (i+1, j), (i+1, j+1), (i, j+1)
+
+    pt_u, pt_r, pt_d, pt_l = (i, j-1), b, d, (i-1, j)
+
+    if j > 0 and pt_u not in p_processed and pixels[pt_u[0], pt_u[1]] == rgb_color:
+        pts_u, pixels_u, p_processed = get_points(pixels, *pt_u, p_processed)
+    else:
+        pts_u, pixels_u = [], []
+
+    if i < 23 and pt_r not in p_processed and pixels[pt_r[0], pt_r[1]] == rgb_color:
+        pts_r, pixels_r, p_processed = get_points(pixels, *pt_r, p_processed)
+    else:
+        pts_r, pixels_r = [], []
+
+    if j < 23 and pt_d not in p_processed and pixels[pt_d[0], pt_d[1]] == rgb_color:
+        pts_d, pixels_d, p_processed = get_points(pixels, *pt_d, p_processed)
+    else:
+        pts_d, pixels_d = [], []
+
+    if i > 0 and pt_l not in p_processed and pixels[pt_l[0], pt_l[1]] == rgb_color:
+        pts_l, pixels_l, p_processed = get_points(pixels, *pt_l, p_processed)
+    else:
+        pts_l, pixels_l = [], []
+
+    # p_processed = p_processed + [pt_u, pt_r, pt_d, pt_l]
+
+    p_polygon = [(i, j)] + pixels_u + pixels_r + pixels_d + pixels_l
+    points = [a, *pts_u, b, *pts_r, c, *pts_d, d, *pts_l, a]
+
+    return points, p_polygon, p_processed
+
+
+
+def reduce_points(points):
+    # repeats
+    count = 1
+    while count > 0:
+        count = 0
+        n = len(points)
+        for i in range(n)[::-1]:
+            if i > 0 and points[i] == points[i-1]:
+                points.pop(i)
+                count += 1
+    # tracebacks
+    count = 1
+    while count > 0:
+        count = 0
+        n = len(points)
+        for i in range(n)[::-1]:
+            if i > 0 and i < n-1 and points[i-1] == points[i+1]:
+                points.pop(i+1)
+                points.pop(i)
+                count += 1
+    # straight lines
+    count = 1
+    while count > 0:
+        count = 0
+        n = len(points)
+        for i in range(n)[::-1]:
+            if i > 0 and i < n-1 and (points[i-1][0] == points[i+1][0] or points[i-1][1] == points[i+1][1]):
+                points.pop(i)
+                count += 1
+    if points[0] == points[-1]:
+        points.pop(-1)
+    return points
 
 
 
