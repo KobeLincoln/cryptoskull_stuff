@@ -508,14 +508,14 @@ d_project = {
 
 
 
-def assemble(token_id, project_name, resize=None):
+def assemble(token_id, project_name, resize=None, bg_visible=True):
 
     dim = d_project[project_name]['dim']
 
     d_meta = df_meta[df_meta['id'] == token_id].iloc[0].to_dict()
     # background
-    color_background = d_background_color[d_meta['backgroundId']]
-    im_out = Image.new(mode='RGB', size=(dim, dim), color=color_background)
+    color_background = d_background_color[d_meta['backgroundId']] if bg_visible else None
+    im_out = Image.new(mode='RGBA', size=(dim, dim), color=color_background)
     # bones
     if d_meta['bonesGene'] != 15:
         color_bones = d_bones_color[d_meta['bonesGene']]
@@ -613,38 +613,17 @@ def export_project(project_name, filepath_template, resize=None):
 
 
 
-def export_svgs(filepath_template):
+def export_svgs(filepath_template, bg_visible=True):
     for token_id in range(0, 10000):
         if token_id in special_tokens:
             continue
-        produce_svg(token_id, filepath_template)
+        produce_svg(token_id, filepath_template, bg_visible)
 
 
 
-# naive
-def produce_svg_naive(token_id, filepath_template):
-
-    pixels = cropped_skulls[token_id].copy().load()
-
-    bg_pixel = pixels[0, 0]
-    svg_content = """<rect width="24" height="24" style="fill:rgb(%d,%d,%d)" />""" % bg_pixel
-    for i in range(24):
-        for j in range(24):
-            pixel = pixels[i, j]
-            if pixel != bg_pixel:
-                w = 1
-                for ii in range(i+1, 24):
-                    if pixels[ii, j] != pixel:
-                        break
-                    w += 1
-                    pixels[ii, j] = bg_pixel
-                    
-                rect = """<rect x="%d" y="%d" width="%d" height="1" style="fill:rgb(%d,%d,%d)" />""" % (i, j, w, *pixel)
-                svg_content += rect
-
-    svg = """<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">%s</svg>""" % svg_content
-    with open(filepath_template % token_id, 'w') as f:
-        f.write(svg)
+def svg_polygon(points, rgb_color):
+    str_points = ' '.join(['%d,%d' % (x, y) for x, y in points])
+    return """<polygon points="%s" fill="rgb(%d,%d,%d)"/>""" % (str_points, *rgb_color)
 
 
 
@@ -653,7 +632,7 @@ c_trans = (0,0,0,0)
 pixels_skull = Image.open('%s\%s\%s' % ('cryptoskulls_backup', 'skull', 'skull0.png')).load()
 
 # sophisticated
-def produce_svg(token_id, filepath_template):
+def produce_svg(token_id, filepath_template, bg_visible=True):
 
     line = '' #'\n'
 
@@ -663,7 +642,9 @@ def produce_svg(token_id, filepath_template):
     
     # background
     bg_pixel = pixels[0, 0]
-    svg_content = """<rect width="24" height="24" style="fill:rgb(%d,%d,%d)" />""" % bg_pixel
+    svg_content = ''
+    if bg_visible:
+        svg_content += """<rect width="24" height="24" style="fill:rgb(%d,%d,%d)"/>""" % bg_pixel
 
     # outline
     pt_alt = None
