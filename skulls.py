@@ -424,6 +424,9 @@ def calc_rarity(df_meta):
         v_max = df_meta[score_col].max()
         df_meta[score_col_s] = (df_meta[score_col] - v_min) / (v_max - v_min)
 
+    df_meta['rarity_score'] = df_meta[score_cols_s].sum(axis=1)
+    df_meta['rarity_score_r'] = df_meta['rarity_score'].rank(ascending=False)
+
     return df_meta
 
 
@@ -647,13 +650,12 @@ def produce_svg_naive(token_id, filepath_template):
 
 c_outline = (38, 50, 56)
 c_trans = (0,0,0,0)
+pixels_skull = Image.open('%s\%s\%s' % ('cryptoskulls_backup', 'skull', 'skull0.png')).load()
 
 # sophisticated
 def produce_svg(token_id, filepath_template):
 
     line = '' #'\n'
-
-    pixels_skull = Image.open('%s\%s\%s' % ('cryptoskulls_backup', 'skull', 'skull0.png')).load()
 
     im = cropped_skulls[token_id]
     pixels = im.copy().load()
@@ -777,25 +779,6 @@ def reduce_points(points):
         points.pop(-1)
     return points
 
-
-
-
-    # nose
-
-    # teeth
-
-    # hair
-
-
-
-
-
-
-
-    svg = """<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">%s</svg>""" % svg_content
-
-    with open(filepath_template % token_id, 'w') as f:
-        f.write(svg)
 
 
 # CLONING PROJECT BASE IMAGES WITH RESIZE OPTION ###################################################
