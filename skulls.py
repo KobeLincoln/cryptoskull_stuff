@@ -4,8 +4,8 @@ import requests, json
 import numpy as np
 import pandas as pd
 
-# import PIL
-from PIL import Image, ImageChops, ImageStat
+from PIL import Image, ImageChops, ImageStat, ImageDraw, ImageFont
+import qrcode
 
 from matplotlib.pyplot import imshow
 
@@ -27,8 +27,6 @@ beard_groups = [
         [8], # NONE
     ]
 
-
-
 eyes_groups = [
         [11, 17], # HARDCODE THESE: squint (no color), small
         [14, 15, 16], # alien, alien, alien,
@@ -39,12 +37,6 @@ eyes_groups = [
         [59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73], # tall
         [74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88], # extra sunk
     ]
-
-
-
-d_flipped_nose_map = {4:2, 5:3, 7:6}
-
-
 
 hair_groups = [
         [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61], # horns
@@ -58,6 +50,8 @@ hair_groups = [
         [108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121], # side comb
         [122], # NONE
     ]
+
+d_flipped_nose_map = {4:2, 5:3, 7:6}
 
 
 
@@ -340,6 +334,12 @@ score_cols = ['base_score', 'skill_score', 'game_score', 'hidden_score']
 score_cols_s = [score_col + '_s' for score_col in score_cols]
 
 
+def count_unique_colors(dr):
+    colors = dr[hr_colors].unique().tolist()
+    colors = [color for color in colors if color not in ['#263238', np.nan]]
+    return len(colors)
+
+
 def calc_rarity(df_meta):
 
     df_meta = df_meta.copy() # starting point
@@ -359,6 +359,7 @@ def calc_rarity(df_meta):
     df_meta['hairColor'] = df_meta['hairGene'].map(d_hair_color).map(rgb_to_hex)
 
     df_meta['base_count'] = 8 - df_meta[['hairColor', 'bonesColor', 'beardColor']].isna().sum(axis=1)
+    df_meta['color_count'] = df_meta.apply(count_unique_colors, axis=1)
 
     # skill traits
     df_meta['fastKick'] = df_meta['skills'].str.contains('FAST_KICK')
@@ -451,7 +452,7 @@ def project_compare(project_a, project_b, resize=96, token_ids=None):
 
     if token_ids == None:
         token_ids = [7583] + get_comparison_ids() + [6969]
-        # print(token_ids)
+        print(token_ids)
 
     ims_a = [assemble(token_id, project_a, resize=resize) for token_id in token_ids]
     ims_b = [assemble(token_id, project_b, resize=resize) for token_id in token_ids]
@@ -581,10 +582,10 @@ def calc_diff(im1, im2):
 
 def validate():
 
-    for token_id in range(0, 10000):
+    for token_id in range(1, 10000):
         if token_id in special_tokens:
             continue
-        im_new = assemble(token_id, 'cryptoskulls_backup')
+        im_new = assemble(token_id, 'cryptoskulls_backup').convert('RGB')
         im_old = cropped_skulls[token_id]
         diff = calc_diff(im_new, im_old)
         if diff > 0:
@@ -880,3 +881,274 @@ def create_mosaic(im_og, output_file_base_name, gif_mode=False, verbose=False):
 
 
 
+# QR CODE IMAGES ###################################################################################
+
+
+
+def make_qr_image(token_id, url, version=9, scale_factor = 12):
+    
+    bg_color = d_background_color.get(df_meta.loc[token_id, 'backgroundId'])
+    c_distance = color_distance_a(bg_color, c_outline)
+    fill_color = c_outline if c_distance>220 else bg_color
+    back_color = (255, 255, 255) if c_distance<=220 else bg_color
+
+    # version 5 or 6 for smaller skulls, 9 for larger skulls
+    qr = qrcode.QRCode(version=version, box_size=1, border=1, error_correction=qrcode.constants.ERROR_CORRECT_H)
+    qr.add_data(url) # Crypto_Skulls, KobeDLincoln
+    qr.make(fit=True)
+    img_qr = qr.make_image(fill_color=fill_color, back_color=back_color).convert('RGBA')
+
+    # skull
+    img_skull_raw = assemble(token_id, 'cryptoskulls_24', None, False)
+    img_skull = Image.new(mode='RGBA', size=(26, 26))
+    for i, j in product([-1, 0, 1], [-1, 0, 1]):
+        img_skull.paste(bg_color, (i+1, j+1), img_skull_raw)
+    img_skull.paste(img_skull_raw, (1,1), img_skull_raw)
+
+    # combining
+    img_qr_dim, _ = img_qr.size
+    paste_pos = int((img_qr_dim - 26) / 2)
+    img_qr.paste(img_skull, (paste_pos, paste_pos), img_skull)
+
+    img_qr = img_qr.resize((img_qr_dim*scale_factor, img_qr_dim*scale_factor), Image.NEAREST).convert('RGB')
+
+    print(token_id, img_qr_dim, img_qr.size, bg_color, c_distance)
+    display(img_qr)
+
+
+
+# BASE CONVERSION (for encoding) ###################################################################
+
+
+
+# https://stackoverflow.com/a/50261968
+ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz"
+
+def encode(n):
+    try:
+        return ALPHABET [n]
+    except IndexError:
+        raise Exception ("cannot encode: %s" % n)
+
+def dec_to_base(dec=0, base=16):
+    if dec < base:
+        return encode (dec)
+    else:
+        return dec_to_base (dec // base, base) + encode (dec % base)
+
+
+
+# TWITTER HEADER IMAGES ############################################################################
+
+
+
+def export_skull_nation_images(kind, filepath_template, start_id=0):
+    print('Exporting %s to template, %s' % (kind, filepath_template))
+    for token_id in range(start_id, 10000):
+        if token_id % 1000 == 0:
+            print('starting ', token_id)
+        if token_id in special_tokens:
+            continue
+        im = make_skull_nation_image(token_id, kind)
+        im.save(filepath_template % token_id)
+
+
+
+def make_skull_nation_image(token_id, kind):
+
+    assert kind in ['CS_Twitter_Header', 'CS_1x1A', 'CS_1x1B']
+
+    bg_color = d_background_color.get(df_meta.loc[token_id, 'backgroundId'])
+
+    c_distance = color_distance_a(bg_color, c_outline)
+    # print(c_distance)
+    text_color = (255, 255, 255) if c_distance<=100 else c_outline
+
+    color_bones = d_bones_color.get(df_meta.loc[token_id, 'bonesGene'])
+    color_skull = d_skull_color.get(df_meta.loc[token_id, 'skullGene'])
+    color_hair = d_hair_color.get(df_meta.loc[token_id, 'hairGene'])
+    color_eyes = d_eyes_color.get(df_meta.loc[token_id, 'eyesGene'])
+    color_beard = d_beard_color.get(df_meta.loc[token_id, 'beardGene'])
+
+    color_accent_1 = color_bones
+    if (color_accent_1 is None) or (color_accent_1 == text_color) or (color_distance_a(bg_color, color_accent_1)<50):
+        color_accent_1 = color_hair
+    if (color_accent_1 is None) or (color_accent_1 == text_color) or (color_distance_a(bg_color, color_accent_1)<50):
+        color_accent_1 = color_eyes
+    if (color_accent_1 is None) or (color_accent_1 == text_color) or (color_distance_a(bg_color, color_accent_1)<50):
+        color_accent_1 = color_skull
+
+    color_accent_2 = color_hair
+    if (color_accent_2 is None) or (color_accent_2 in [c_outline, color_accent_1]):
+        color_accent_2 = color_eyes
+    if (color_accent_2 is None) or (color_accent_2 in [c_outline, color_accent_1]):
+        color_accent_2 = color_skull
+    if (color_accent_2 is None) or (color_accent_2 in [c_outline, color_accent_1]):
+        color_accent_2 = color_beard
+    if (color_accent_2 is None) or (color_accent_2 in [c_outline, color_accent_1]):
+        color_accent_2 = bg_color
+
+    color_accent_3 = color_eyes
+    if (color_accent_3 is None) or (color_accent_3 in [c_outline, color_accent_1, color_accent_2]):
+        color_accent_3 = color_beard
+    if (color_accent_3 is None) or (color_accent_3 in [c_outline, color_accent_1, color_accent_2]):
+        color_accent_3 = bg_color
+    if (color_accent_3 is None) or (color_accent_3 in [c_outline, color_accent_1, color_accent_2]):
+        color_accent_3 = color_skull
+
+    if kind == 'CS_Twitter_Header':
+
+        img = Image.new(mode='RGBA', size=(1500, 500), color=bg_color)
+        d1 = ImageDraw.Draw(img)
+        font = ImageFont.truetype('font/cryptoskulls.otf', 78)
+        d1.text((1342, 247), 'CS', fill=text_color, font=font)
+        d1.text((1342, 285), str(token_id).rjust(4, '0'), fill=text_color, font=font)
+
+        d1.rectangle(((1166, 270), (1199, 303)), fill=color_accent_2)
+        d1.rectangle(((1166, 304), (1199, 337)), fill=color_accent_1)
+        d1.rectangle(((1200, 270), (1233, 303)), fill=c_outline)
+        d1.rectangle(((1200, 304), (1233, 337)), fill=color_skull)
+
+        # polygons (three positions for each x)
+        str_x_enc = dec_to_base(token_id, 3).rjust(9, '0')
+        xs = [225, 330, 426, 698, 793, 1046, 735, 834, 1083]
+        for i, str_x in enumerate(str_x_enc):
+            xs[i] += 25 * (int(str_x) - 1)
+        d1.polygon(((xs[0],0), (xs[0],25), (xs[1],25), (xs[1],50), (xs[2],50), (xs[2],75),
+                    (530,75), (530,25), (xs[3],25), (xs[3],50), (xs[4],50), (xs[4],75),
+                    (922,75), (922,25), (xs[5],25), (xs[5],0)), fill=color_accent_1)
+        d1.polygon(((xs[6],499), (xs[6],474), (xs[7],474), (xs[7],424),
+                    (988,424), (988,449), (xs[8],449), (xs[8],474),
+                    (1138,474), (1138,499)), fill=color_accent_1)
+
+        # overlay image
+        img_text_file = 'images/header_light.png' if c_distance<=100 else 'images/header_dark.png'
+        img_text = Image.open(img_text_file)
+        img.paste(img_text, (0, 0), img_text)
+
+    elif kind == 'CS_1x1A':
+
+        img = Image.new(mode='RGB', size=(1000, 1000), color=bg_color)
+
+        img_skull = cropped_skulls[token_id]
+        img_skull = img_skull.resize((34*24, 34*24), Image.NEAREST)
+        xy = int((img.size[0] - img_skull.size[0]) / 2)
+        img.paste(img_skull, (xy, xy))
+
+        d1 = ImageDraw.Draw(img)
+        font = ImageFont.truetype('font/cryptoskulls.otf', 70)
+        d1.text((858, 400), 'CS', fill=text_color, font=font)
+        d1.text((858, 438), str(token_id).rjust(4, '0'), fill=text_color, font=font)
+        font = ImageFont.truetype('font/apercu_mono.otf', 16)
+        d1.text((698, 925), str(token_id).rjust(4, '0'), fill=text_color, font=font)
+
+        x=892
+        y=194
+        d1.rectangle(((x, y), (x+33, y+33)), fill=color_accent_2)
+        d1.rectangle(((x, y+34), (x+33, y+34+33)), fill=color_accent_1)
+        d1.rectangle(((x+34, y), (x+34+33, y+33)), fill=c_outline)
+        d1.rectangle(((x+34, y+34), (x+34+33, y+34+33)), fill=color_skull)
+        y=605
+        d1.rectangle(((x+34, y), (x+34+33, y+33)), fill=c_outline)
+
+        # polygons (three positions for each x)
+        d1.polygon(((0, 195), (32,195), (32,362), (100,362), (100,536), (66,536),
+                    (66,663), (32,663), (32,738), (0,738)), fill=color_accent_1)
+
+        # overlay image
+        img_text_file = 'images/square_light.png' if c_distance<=100 else 'images/square_dark.png'
+        img_text = Image.open(img_text_file)
+        img.paste(img_text, (0, 0), img_text)
+
+    elif kind == 'CS_1x1B':
+
+        # c_distance_1 = color_distance_a(color_accent_1, c_outline)
+        # c_distance_2 = color_distance_a(color_accent_2, c_outline)
+
+        # text_color_1 = (255, 255, 255) if c_distance_1<=100 else c_outline
+        # text_color_2 = (255, 255, 255) if c_distance_2<=100 else c_outline
+
+        img = Image.new(mode='RGB', size=(1000, 1000), color=color_accent_2)
+        d1 = ImageDraw.Draw(img)
+        d1.rectangle(((0, 501), (1000, 1000)), fill=color_accent_1)
+
+        img_skull = cropped_skulls[token_id]
+        img_skull = img_skull.resize((21*24, 21*24), Image.NEAREST)
+        y = int((img.size[0] - img_skull.size[0]) / 2)
+        img.paste(img_skull, (0, y))
+
+        font = ImageFont.truetype('font/cryptoskulls.otf', 190)
+        d1.text((652, 201), 'CS', fill=text_color, font=font)
+        d1.text((652, 296), str(token_id).rjust(4, '0'), fill=text_color, font=font)
+        font = ImageFont.truetype('font/apercu_mono.otf', 16)
+        d1.text((698, 925), str(token_id).rjust(4, '0'), fill=text_color, font=font)
+
+        x=900
+        y=178
+        d1.rectangle(((x, y), (x+33, y+33)), fill=color_accent_3)
+        d1.rectangle(((x, y+34), (x+33, y+34+33)), fill=color_accent_1)
+        d1.rectangle(((x+34, y), (x+34+33, y+33)), fill=c_outline)
+        d1.rectangle(((x+34, y+34), (x+34+33, y+34+33)), fill=color_skull)
+        x=892
+        y=605
+        d1.rectangle(((x+34, y), (x+34+33, y+33)), fill=c_outline)
+
+        # overlay image
+        # img_text_file_1 = 'images/square_light.png' if c_distance_1<=100 else 'images/square_dark.png'
+        # img_text_1 = Image.open(img_text_file_1).crop((0, 501, 1000, 1000))
+        # img.paste(img_text_1, (0, 501), img_text_1)
+
+        # img_text_file_2 = 'images/square_light.png' if c_distance_2<=100 else 'images/square_dark.png'
+        # img_text_2 = Image.open(img_text_file_2).crop((0, 0, 1000, 500))
+        # img.paste(img_text_2, (0, 0), img_text_2)
+
+        img_text_file = 'images/square_light.png' if c_distance<=100 else 'images/square_dark.png'
+        img_text = Image.open(img_text_file)
+        img.paste(img_text, (0, 0), img_text)
+
+
+        # img = Image.blend(img, Image.open('images/10.jpg'), 0.25)
+
+    return img
+
+
+
+# font = ImageFont.truetype('font/apercu_mono.otf', 16)
+# d1.text((31, 18), '#WEDIGTHESKULLS', fill=(255, 0,0), font=font)
+# d1.text((31, 146), 'CRYPTO SKULLS', fill=(255, 0,0), font=font)
+# d1.text((31, 163), 'SINCE 2019', fill=(255, 0,0), font=font)
+# d1.text((1169, 18), 'SKULL NATION', fill=(255, 0,0), font=font)
+# d1.text((1169, 35), u'スカルネーション NACIÓN CALAVERA', fill=(255, 0,0), font=font)
+# d1.text((1169, 52), u'НАЦИЯ ЧЕРЕПА SKULL NATION', fill=(255, 0,0), font=font)
+# d1.text((1169, 69), 'ﻤﺠﻤﺠﻟا ﺔﻣأ  NEGARA TENGKORAK 骷髅国', fill=(255, 0,0), font=font)
+# d1.text((1169, 87), 'SCHÄDELNATION CRÂNE NATION', fill=(255, 0,0), font=font)
+# d1.text((1169, 104), u'해골나라   KAFATASI ULUSU', fill=(255, 0,0), font=font)
+# d1.text((1169, 407), 'THE SECOND 10K PFP COLLECTION', fill=(255, 0,0), font=font)
+# d1.text((1169, 424), 'AFTER CRYPTO PUNKS ON THE', fill=(255, 0,0), font=font)
+# d1.text((1169, 441), 'ETHEREUM BLOCKCHAIN SINCE 2019.', fill=(255, 0,0), font=font)
+
+# def my_rect(p):
+#     d1.rectangle((p, (p[0]+13, p[1]+13)), fill=color_accent)
+# my_rect((416, 280))
+# my_rect((478, 91))
+# my_rect((495, 384))
+# my_rect((502, 205))
+# my_rect((509, 160))
+# my_rect((509, 299))
+# my_rect((623, 77))
+# my_rect((777, 384))
+# my_rect((833, 212))
+# my_rect((989, 121))
+# my_rect((989, 205))
+# my_rect((989, 335))
+# my_rect((1003, 191))
+# my_rect((1003, 294))
+# my_rect((1010, 317))
+# my_rect((1031, 198))
+# my_rect((1081, 324))
+# my_rect((1111, 301))
+
+# d1.line(((530, 0), (530, 499)), fill=(0,0,255))
+# d1.line(((988, 0), (988, 499)), fill=(0,0,255))
+# d1.line(((0, 134), (1499, 134)), fill=(0,0,255))
+# d1.line(((0, 348), (1499, 348)), fill=(0,0,255))
