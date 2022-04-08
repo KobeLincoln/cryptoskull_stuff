@@ -600,6 +600,8 @@ def validate():
 def export_project(project_name, filepath_template, resize=None):
 
     for token_id in range(0, 10000):
+        if token_id % 1000 == 0:
+            print('starting ', token_id)
         if token_id in special_tokens:
             continue
         im = assemble(token_id, project_name)
@@ -618,7 +620,8 @@ def export_svgs(filepath_template, bg_visible=True):
     for token_id in range(0, 10000):
         if token_id in special_tokens:
             continue
-        produce_svg(token_id, filepath_template, bg_visible)
+        im = cropped_skulls[token_id]
+        produce_svg(im, token_id, filepath_template, bg_visible)
 
 
 
@@ -633,11 +636,11 @@ c_trans = (0,0,0,0)
 pixels_skull = Image.open('%s\%s\%s' % ('cryptoskulls_backup', 'skull', 'skull0.png')).load()
 
 # sophisticated
-def produce_svg(token_id, filepath_template, bg_visible=True):
+def produce_svg(im, token_id, filepath_template, bg_visible=True):
 
     line = '' #'\n'
 
-    im = cropped_skulls[token_id]
+    # im = cropped_skulls[token_id]
     pixels = im.copy().load()
     pixels_alt = im.copy().load()
     
@@ -885,7 +888,7 @@ def create_mosaic(im_og, output_file_base_name, gif_mode=False, verbose=False):
 
 
 
-def make_qr_image(token_id, url, version=9, scale_factor = 12):
+def make_qr_image(token_id, url, version=9, scale_factor=12):
     
     bg_color = d_background_color.get(df_meta.loc[token_id, 'backgroundId'])
     c_distance = color_distance_a(bg_color, c_outline)
@@ -916,6 +919,35 @@ def make_qr_image(token_id, url, version=9, scale_factor = 12):
     display(img_qr)
 
 
+
+# EASTER BUNNY IMAGES ###################################################################################
+
+
+
+def make_overlay_image(token_id, image_name, resize=None):
+    img = cropped_skulls[token_id]
+    img_bunny = Image.open('images/%s.png' % image_name)
+    img.paste(img_bunny, (0, 0), img_bunny)
+    if resize is not None:
+        img = img.resize((24*resize, 24*resize), Image.NEAREST).convert('RGB')
+    return(img)
+
+
+
+def export_overlay(image_name, filepath_template, resize=None, svg=False):
+    for token_id in range(0, 10000):
+        if token_id % 1000 == 0:
+            print('starting ', token_id)
+        if token_id in special_tokens:
+            continue
+        im = make_overlay_image(token_id, image_name, resize=resize)
+
+        if svg:
+            produce_svg(im, token_id, filepath_template, bg_visible=True)
+        else:
+            im.save(filepath_template % token_id)
+
+        
 
 # BASE CONVERSION (for encoding) ###################################################################
 
@@ -1111,44 +1143,3 @@ def make_skull_nation_image(token_id, kind):
 
     return img
 
-
-
-# font = ImageFont.truetype('font/apercu_mono.otf', 16)
-# d1.text((31, 18), '#WEDIGTHESKULLS', fill=(255, 0,0), font=font)
-# d1.text((31, 146), 'CRYPTO SKULLS', fill=(255, 0,0), font=font)
-# d1.text((31, 163), 'SINCE 2019', fill=(255, 0,0), font=font)
-# d1.text((1169, 18), 'SKULL NATION', fill=(255, 0,0), font=font)
-# d1.text((1169, 35), u'スカルネーション NACIÓN CALAVERA', fill=(255, 0,0), font=font)
-# d1.text((1169, 52), u'НАЦИЯ ЧЕРЕПА SKULL NATION', fill=(255, 0,0), font=font)
-# d1.text((1169, 69), 'ﻤﺠﻤﺠﻟا ﺔﻣأ  NEGARA TENGKORAK 骷髅国', fill=(255, 0,0), font=font)
-# d1.text((1169, 87), 'SCHÄDELNATION CRÂNE NATION', fill=(255, 0,0), font=font)
-# d1.text((1169, 104), u'해골나라   KAFATASI ULUSU', fill=(255, 0,0), font=font)
-# d1.text((1169, 407), 'THE SECOND 10K PFP COLLECTION', fill=(255, 0,0), font=font)
-# d1.text((1169, 424), 'AFTER CRYPTO PUNKS ON THE', fill=(255, 0,0), font=font)
-# d1.text((1169, 441), 'ETHEREUM BLOCKCHAIN SINCE 2019.', fill=(255, 0,0), font=font)
-
-# def my_rect(p):
-#     d1.rectangle((p, (p[0]+13, p[1]+13)), fill=color_accent)
-# my_rect((416, 280))
-# my_rect((478, 91))
-# my_rect((495, 384))
-# my_rect((502, 205))
-# my_rect((509, 160))
-# my_rect((509, 299))
-# my_rect((623, 77))
-# my_rect((777, 384))
-# my_rect((833, 212))
-# my_rect((989, 121))
-# my_rect((989, 205))
-# my_rect((989, 335))
-# my_rect((1003, 191))
-# my_rect((1003, 294))
-# my_rect((1010, 317))
-# my_rect((1031, 198))
-# my_rect((1081, 324))
-# my_rect((1111, 301))
-
-# d1.line(((530, 0), (530, 499)), fill=(0,0,255))
-# d1.line(((988, 0), (988, 499)), fill=(0,0,255))
-# d1.line(((0, 134), (1499, 134)), fill=(0,0,255))
-# d1.line(((0, 348), (1499, 348)), fill=(0,0,255))
