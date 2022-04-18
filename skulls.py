@@ -17,9 +17,9 @@ from itertools import product, combinations
 
 
 
+c_outline = (38, 50, 56)
+
 special_tokens = [9, 19, 20, 24, 27, 36, 41, 42, 43, 70]
-
-
 
 beard_groups = [
         [7, 0, 1, 2], # thin
@@ -29,7 +29,7 @@ beard_groups = [
 
 eyes_groups = [
         [11, 17], # HARDCODE THESE: squint (no color), small
-        [14, 15, 16], # alien, alien, alien,
+        [14, 15, 16], # alien black, alien white pupils, alien white pupils crosseyed,
         [30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43], # side look
         [0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 12], # small
         [13, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29], # wide
@@ -142,6 +142,9 @@ def get_eyes_color_map():
             d_eyes_color.update({eyes_gene:color})
 
     # alien eyes with pupils in group 1
+    d_eyes_color[11] = c_outline
+    d_eyes_color[17] = c_outline
+    d_eyes_color[14] = c_outline
     d_eyes_color[15] = (255, 255, 255)
     d_eyes_color[16] = (255, 255, 255)
 
@@ -505,11 +508,20 @@ d_project = {
             'cryptoskulls_24':          {'dim': 24, 'flip_noses': True},
             'cryptoskulls_24_profile':  {'dim': 24, 'flip_noses': False},
             'cryptoskulls_96':          {'dim': 96, 'flip_noses': True},
+            # 'hood':                     {'dim': 24, 'flip_noses': True},
             }
 
 
 
 def assemble(token_id, project_name, resize=None, bg_visible=True):
+
+    if project_name == 'hood':
+        return assemble_hood(token_id, resize=resize, bg_visible=bg_visible)
+    else:
+        return assemble_project(token_id, project_name, resize=resize, bg_visible=bg_visible)
+
+
+def assemble_project(token_id, project_name, resize=None, bg_visible=True):
 
     dim = d_project[project_name]['dim']
 
@@ -631,7 +643,6 @@ def svg_polygon(points, rgb_color):
 
 
 
-c_outline = (38, 50, 56)
 c_trans = (0,0,0,0)
 pixels_skull = Image.open('%s\%s\%s' % ('cryptoskulls_backup', 'skull', 'skull0.png')).load()
 
@@ -920,12 +931,12 @@ def make_qr_image(token_id, url, version=9, scale_factor=12):
 
 
 
-# EASTER BUNNY IMAGES ###################################################################################
+# EASTER BUNNY IMAGES ##############################################################################
 
 
 
 def make_overlay_image(token_id, image_name, resize=None):
-    img = cropped_skulls[token_id]
+    img = cropped_skulls[token_id].copy()
     img_bunny = Image.open('images/%s.png' % image_name)
     img.paste(img_bunny, (0, 0), img_bunny)
     if resize is not None:
@@ -948,6 +959,87 @@ def export_overlay(image_name, filepath_template, resize=None, svg=False):
             im.save(filepath_template % token_id)
 
         
+
+# SKULL HOODS ######################################################################################
+
+
+
+# copy of assemble
+# TODO: encapsulate this better maybe
+def assemble_hood(token_id, resize=None, bg_visible=True):
+
+    project_name = 'cryptoskulls_24'
+
+    dim = d_project[project_name]['dim']
+
+    d_meta = df_meta[df_meta['id'] == token_id].iloc[0].to_dict()
+    # background
+    color_background = d_background_color[d_meta['backgroundId']] if bg_visible else None
+    im_out = Image.new(mode='RGBA', size=(dim, dim), color=color_background)
+    # bones
+    if d_meta['bonesGene'] != 15:
+        color_bones = d_bones_color[d_meta['bonesGene']]
+        im_bones = Image.open('%s\%s\%s' % (project_name, 'bones', 'bones0.png'))
+        im_out.paste(replace_black(im_bones, color_bones), im_bones)
+    # skull
+    color_skull = d_skull_color[d_meta['skullGene']]
+    im_skull = Image.open('%s\%s\%s' % (project_name, 'skull', 'skull0.png'))
+    im_out.paste(replace_black(im_skull, color_skull), im_skull)
+    # hood
+    color_hood = c_outline
+    if d_meta['hairGene'] != 122:
+        color_hood = d_hair_color[d_meta['hairGene']]
+    if color_hood == c_outline:
+        color_hood = d_eyes_color[d_meta['eyesGene']]
+    if color_hood == c_outline:
+        color_hood = d_skull_color[d_meta['skullGene']]
+    im_hood = Image.open('images//hood.png')
+    im_out.paste(replace_black(im_hood, color_hood), im_hood)
+    # beard
+    if d_meta['beardGene'] != 8:
+        type_beard = get_beard_group(d_meta['beardGene'])
+        color_beard = d_beard_color[d_meta['beardGene']]
+        im_beard = Image.open('%s\%s\%s' % (project_name, 'beard', 'beard%d.png' % type_beard))
+        im_out.paste(replace_black(im_beard, color_beard), im_beard)
+    # eyes
+    type_eyes = get_eyes_group(d_meta['eyesGene'])
+    if type_eyes in [0, 1]:
+        # hard coded
+        im_eyes = Image.open('%s\%s\%s' % (project_name, 'eyes', '#%s.png' % d_meta['eyesGene']))
+        im_out.paste(im_eyes, im_eyes)
+    else:
+        color_eyes = d_eyes_color[d_meta['eyesGene']]
+        im_eyes = Image.open('%s\%s\%s' % (project_name, 'eyes', 'eyes%d.png' % type_eyes))
+        im_out.paste(replace_black(im_eyes, color_eyes), im_eyes)
+    # nose
+    nose_gene = d_meta['noseGene']
+    nose_gene_use = d_flipped_nose_map.get(nose_gene, nose_gene)
+    im_nose = Image.open('%s\%s\%s' % (project_name, 'nose', '#%s.png' % nose_gene_use))
+    if nose_gene in d_flipped_nose_map.keys() and d_project[project_name]['flip_noses']:
+        im_nose = im_nose.transpose(Image.FLIP_LEFT_RIGHT)
+    im_out.paste(im_nose, im_nose)
+    # teeth
+    im_teeth = Image.open('%s\%s\%s' % (project_name, 'teeth', '#%s.png' % d_meta['teethGene']))
+    im_out.paste(im_teeth, im_teeth)
+    # no hair
+    # if d_meta['hairGene'] != 122:
+    #     type_hair = get_hair_group(d_meta['hairGene'])
+    #     color_hair = d_hair_color[d_meta['hairGene']]
+    #     if type_hair == 1:
+    #         im_hair = Image.open('%s\%s\%s' % (project_name, 'hair', 'hair%d.png' % 0))
+    #         im_hair3 = Image.open('%s\%s\%s' % (project_name, 'hair', 'hair%d.png' % 2))
+    #         im_hair.paste(im_hair3, im_hair3)
+    #     else:
+    #         im_hair = Image.open('%s\%s\%s' % (project_name, 'hair', 'hair%d.png' % type_hair))
+    #     im_out.paste(replace_black(im_hair, color_hair), im_hair)
+
+    if resize is not None:
+        im_out = im_out.resize((resize, resize), Image.NEAREST)
+
+    return im_out
+
+
+
 
 # BASE CONVERSION (for encoding) ###################################################################
 
