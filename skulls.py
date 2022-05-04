@@ -451,6 +451,28 @@ def color_distance(df, col1, col2):
 
 
 
+def project_showcase(project_a, resize=96, token_ids=None):
+
+    if token_ids == None:
+        token_ids = [7583] + get_comparison_ids() + [6969]
+        print(token_ids)
+
+    ims_a = [assemble(token_id, project_a, resize=resize) for token_id in token_ids]
+
+    n_wide = int(np.ceil(np.sqrt(len(token_ids))))
+    n_wide = max(n_wide, 1)
+
+    im_out = Image.new(mode='RGBA', size=(resize*n_wide, resize*int(np.ceil(len(token_ids)/n_wide))))
+
+    boxes = get_boxes(im_out, resize)
+
+    for i, im_a in enumerate(ims_a):
+
+        im_out.paste(im_a, boxes[i])
+
+    return im_out
+
+
 def project_compare(project_a, project_b, resize=96, token_ids=None):
 
     if token_ids == None:
@@ -1232,6 +1254,84 @@ def make_skull_nation_image(token_id, kind):
 
 
         # img = Image.blend(img, Image.open('images/10.jpg'), 0.25)
+
+    return img
+
+
+
+# I VOTED IMAGE ####################################################################################
+
+
+
+def export_voted_images(filepath_template, start_id=0):
+    print('Exporting to template, %s' % filepath_template)
+    for token_id in range(start_id, 10000):
+        if token_id % 1000 == 0:
+            print('starting ', token_id)
+        if token_id in special_tokens:
+            continue
+        im = make_voted_image(token_id)
+        im.save(filepath_template % token_id)
+
+
+
+def make_voted_image(token_id):
+
+    bg_color = d_background_color.get(df_meta.loc[token_id, 'backgroundId'])
+
+    c_distance = color_distance_a(bg_color, c_outline)
+    # print(c_distance)
+    text_color = (255, 255, 255) if c_distance<=100 else c_outline
+
+    color_bones = d_bones_color.get(df_meta.loc[token_id, 'bonesGene'])
+    color_skull = d_skull_color.get(df_meta.loc[token_id, 'skullGene'])
+    color_hair = d_hair_color.get(df_meta.loc[token_id, 'hairGene'])
+    color_eyes = d_eyes_color.get(df_meta.loc[token_id, 'eyesGene'])
+    color_beard = d_beard_color.get(df_meta.loc[token_id, 'beardGene'])
+
+    color_accent_1 = color_bones
+    if (color_accent_1 is None) or (color_accent_1 == text_color) or (color_distance_a(bg_color, color_accent_1)<50):
+        color_accent_1 = color_hair
+    if (color_accent_1 is None) or (color_accent_1 == text_color) or (color_distance_a(bg_color, color_accent_1)<50):
+        color_accent_1 = color_eyes
+    if (color_accent_1 is None) or (color_accent_1 == text_color) or (color_distance_a(bg_color, color_accent_1)<50):
+        color_accent_1 = color_skull
+
+    color_accent_2 = color_hair
+    if (color_accent_2 is None) or (color_accent_2 in [c_outline, color_accent_1]):
+        color_accent_2 = color_skull
+    if (color_accent_2 is None) or (color_accent_2 in [c_outline, color_accent_1, (255, 255, 255)]):
+        color_accent_2 = color_eyes
+    if (color_accent_2 is None) or (color_accent_2 in [c_outline, color_accent_1]):
+        color_accent_2 = color_beard
+    if (color_accent_2 is None) or (color_accent_2 in [c_outline, color_accent_1]):
+        color_accent_2 = bg_color
+
+    img = Image.new(mode='RGBA', size=(960, 960), color=color_accent_1)
+    d1 = ImageDraw.Draw(img)
+    d1.rectangle(((480, 480), (960, 960)), fill=color_accent_2)
+
+    font = ImageFont.truetype('font/cryptoskulls.otf', 208)
+    d1.text((492, 450), 'CRYPTO', fill=text_color, font=font)
+    d1.text((492, 552), 'SKULLS', fill=text_color, font=font)
+
+    font = ImageFont.truetype('font/cryptoskulls.otf', 176)
+    d1.text((12, -30), 'I', fill=text_color, font=font)
+    d1.text((12, 58), 'VOTED', fill=text_color, font=font)
+
+    img_skull = cropped_skulls[token_id]
+    img_skull = img_skull.resize((20*24, 20*24), Image.NEAREST)
+    img.paste(img_skull, (0, 480))
+
+    img_dao_file = 'images/dao.png'
+    img_dao = Image.open(img_dao_file)
+    img_dao_comp = Image.new(mode='RGBA', size=img_dao.size, color=text_color)
+    img.paste(img_dao_comp, (720, 770), img_dao)
+
+    img_checkmark_file = 'images/checkmark.png'
+    img_checkmark = Image.open(img_checkmark_file)
+    img_checkmark_comp = Image.new(mode='RGBA', size=img_checkmark.size, color=text_color)
+    img.paste(img_checkmark_comp, (795, 20), img_checkmark)
 
     return img
 
